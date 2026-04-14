@@ -1,0 +1,50 @@
+{
+  "xsappname": "CAPHanaDemoApp",
+  "tenant-mode": "dedicated",
+  "description": "XSUAA security configuration for CAP HANA Demo Application",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.admin",
+      "description": "Full access — create, read, update, delete invoices"
+    },
+    {
+      "name": "$XSAPPNAME.viewer",
+      "description": "Read-only access to invoices"
+    }
+  ],
+  "attributes": [],
+  "role-templates": [
+    {
+      "name": "InvoiceAdmin",
+      "description": "Invoice Administrator",
+      "scope-references": ["$XSAPPNAME.admin"],
+      "attribute-references": []
+    },
+    {
+      "name": "InvoiceViewer",
+      "description": "Invoice Viewer (read-only)",
+      "scope-references": ["$XSAPPNAME.viewer"],
+      "attribute-references": []
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "InvoiceAdmin",
+      "description": "Invoice Admin Role Collection",
+      "role-template-references": ["$XSAPPNAME.InvoiceAdmin"]
+    },
+    {
+      "name": "InvoiceViewer",
+      "description": "Invoice Viewer Role Collection",
+      "role-template-references": ["$XSAPPNAME.InvoiceViewer"]
+    }
+  ],
+  "oauth2-configuration": {
+    "token-validity": 43200,
+    "refresh-token-validity": 604800,
+    "redirect-uris": [
+      "https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com/**",
+      "https://*.cfapps.us10-001.hana.ondemand.com/**"
+    ]
+  }
+}

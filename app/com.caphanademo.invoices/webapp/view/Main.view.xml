@@ -1,0 +1,48 @@
+<mvc:View
+	controllerName="com.caphanademo.invoices.controller.Main"
+	displayBlock="true"
+	xmlns="sap.m"
+	xmlns:f="sap.f"
+	xmlns:table="sap.ui.table"
+	xmlns:form="sap.ui.layout.form"
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns:core="sap.ui.core"
+	core:require="{
+		formatter: 'com/caphanademo/invoices/model/formatter'
+	}">
+
+	<f:DynamicPage id="page">
+		<f:title>
+			<f:DynamicPageTitle>
+				<f:heading>
+					<Title text="{i18n>appTitle}"/>
+				</f:heading>
+			</f:DynamicPageTitle>
+		</f:title>
+		<f:header>
+			<f:DynamicPageHeader>
+				<f:content>
+				</f:content>
+			</f:DynamicPageHeader>
+		</f:header>
+		<f:content>
+			<VBox>
+				<table:Table 
+					rows="{/Invoices}"
+					selectionBehavior="RowOnly"
+					selectionMode="Single"
+					rowSelectionChange=".onRowSelectionChange">
+					<table:columns></table:columns>
+				</table:Table>
+				<Panel>
+					<form:SimpleForm
+						id="detailForm"
+						layout="ResponsiveGridLayout">
+						<form:content>
+						</form:content>
+					</form:SimpleForm>
+				</Panel>
+			</VBox>
+		</f:content>
+	</f:DynamicPage>
+</mvc:View>

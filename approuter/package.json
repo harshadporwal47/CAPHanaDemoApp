@@ -1,0 +1,14 @@
+{
+  "name": "CAPHanaDemoApp-approuter",
+  "version": "1.0.0",
+  "description": "Application Router for CAPHanaDemoApp",
+  "dependencies": {
+    "@sap/approuter": "^16"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

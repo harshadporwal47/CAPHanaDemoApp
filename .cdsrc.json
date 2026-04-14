@@ -1,0 +1,36 @@
+{
+  "requires": {
+    "db": {
+      "[production]": {
+        "kind": "hana"
+      },
+      "[hybrid]": {
+        "kind": "hana"
+      },
+      "[development]": {
+        "kind": "sqlite",
+        "credentials": {
+          "url": ":memory:"
+        }
+      }
+    },
+    "auth": {
+      "[production]": {
+        "kind": "xsuaa"
+      },
+      "[hybrid]": {
+        "kind": "xsuaa"
+      }
+    }
+  },
+  "build": {
+    "target": "gen",
+    "tasks": [
+      { "for": "hana", "src": "db", "options": { "model": ["db", "srv"] } },
+      { "for": "nodejs", "src": "srv" }
+    ]
+  },
+  "hana": {
+    "deploy-format": "hdbtable"
+  }
+}

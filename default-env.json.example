@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy this file to 'default-env.json' and fill in your HANA Cloud credentials.",
+  "_comment2": "Get credentials via: cf service-key CAPHanaDemoApp-db CAPHanaDemoApp-db-key",
+  "VCAP_SERVICES": {
+    "hana": [
+      {
+        "label": "hana",
+        "name": "CAPHanaDemoApp-db",
+        "tags": ["hana", "database", "relational", "hdi", "devops"],
+        "credentials": {
+          "certificate": "-----BEGIN CERTIFICATE-----\n<paste-your-certificate-here>\n-----END CERTIFICATE-----",
+          "driver": "com.sap.db.jdbc.Driver",
+          "hdi_password": "<hdi-password-from-service-key>",
+          "hdi_user": "<hdi-user-from-service-key>",
+          "host": "<guid>.hana.trial.hanatrial.ondemand.com",
+          "password": "<password-from-service-key>",
+          "port": "443",
+          "schema": "<schema-name-from-service-key>",
+          "url": "jdbc:sap://<guid>.hana.trial.hanatrial.ondemand.com:443/?encrypt=true&validateCertificate=true",
+          "user": "<user-from-service-key>"
+        }
+      }
+    ]
+  }
+}

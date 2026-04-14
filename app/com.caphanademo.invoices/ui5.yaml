@@ -1,0 +1,17 @@
+specVersion: "4.0"
+metadata:
+  name: com.caphanademo.invoices
+type: application
+framework:
+  name: SAPUI5
+  version: "1.146.0"
+  libraries:
+    - name: sap.m
+    - name: sap.f
+    - name: sap.ui.layout
+    - name: sap.ui.core
+    - name: sap.fe.templates
+    - name: sap.insights
+    - name: sap.ui.fl
+    - name: sap.ui.comp
+    - name: themelib_sap_horizon

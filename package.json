@@ -1,0 +1,46 @@
+{
+  "name": "cap-hana-demo-app",
+  "version": "1.0.0",
+  "description": "CAP Application connected to SAP HANA Cloud - Invoice Management Demo",
+  "repository": "<add-your-repo-url>",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "watch:hybrid": "cds watch --profile hybrid",
+    "build": "cds build --production",
+    "deploy:cf": "mbt build && cf deploy mta_archives/*.mtar",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@cap-js/hana": "^1",
+    "@sap/cds": "^8",
+    "@sap/xssec": "^3",
+    "express": "^4",
+    "passport": "^0.7"
+  },
+  "devDependencies": {
+    "@cap-js/sqlite": "^1",
+    "@sap/cds-dk": "^8",
+    "cds-plugin-ui5": "^0.17.0"
+  },
+  "cds": {
+    "requires": {
+      "auth": {
+        "[production]": {
+          "kind": "xsuaa"
+        },
+        "[development]": {
+          "kind": "mocked"
+        },
+        "[hybrid]": {
+          "kind": "mocked"
+        }
+      }
+    }
+  }
+}
