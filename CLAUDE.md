@@ -11,7 +11,11 @@ A **SAP Cloud Application Programming (CAP)** application built with Node.js tha
 - Persists data to **SAP HANA Cloud** (via HDI containers on BTP)
 - Uses **SQLite in-memory** for local development (no HANA required by default)
 - Supports **hybrid mode** — local Node.js server connected to a remote HANA instance
+- Serves a **SAPUI5 Fiori Elements** List Report + Object Page UI
 - Is deployable to **SAP BTP Cloud Foundry** via MTA
+
+**GitHub:** https://github.com/harshadporwal47/CAPHanaDemoApp
+**Deployed App:** https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com/com.caphanademo.invoices/index.html
 
 ---
 
@@ -20,22 +24,42 @@ A **SAP Cloud Application Programming (CAP)** application built with Node.js tha
 ```
 CAPHanaDemoApp/
 ├── db/
-│   ├── schema.cds              # CDS data model (Invoice, InvoiceToItem)
+│   ├── schema.cds                        # CDS data model (Invoice, InvoiceToItem)
 │   └── data/
-│       ├── invoice-Invoice.csv         # Seed data for Invoice
-│       └── invoice-InvoiceToItem.csv   # Seed data for InvoiceToItem
+│       ├── invoice-Invoice.csv           # Seed data for Invoice
+│       └── invoice-InvoiceToItem.csv     # Seed data for InvoiceToItem
 ├── srv/
-│   ├── invoice-service.cds     # OData service definition + annotations
-│   └── invoice-service.js      # Custom event handlers (business logic)
-├── gen/                        # Build output (auto-generated, not in git)
-├── mta.yaml                    # MTA deployment descriptor for BTP CF
-├── xs-security.json            # XSUAA security configuration
-├── package.json                # Node.js dependencies and scripts
-├── .cdsrc.json                 # CDS configuration (profiles, build)
-├── .env.example                # Template for local environment variables
-├── default-env.json.example    # Template for HANA Cloud credentials (local hybrid)
+│   ├── invoice-service.cds              # OData service definition + annotations
+│   └── invoice-service.js               # Custom event handlers (business logic)
+├── app/
+│   └── com.caphanademo.invoices/
+│       ├── webapp/
+│       │   ├── index.html               # SAPUI5 bootstrap (CDN 1.120.23, sap_horizon)
+│       │   ├── manifest.json            # App descriptor (Fiori Elements, OData model)
+│       │   ├── Component.js             # UI5 component root
+│       │   ├── changes/
+│       │   │   ├── flexibility-bundle.json   # sap.ui.fl bundle (must be valid JSON array structure)
+│       │   │   └── changes-bundle.json
+│       │   ├── controller/              # BaseController, App, Main
+│       │   ├── view/                    # App.view.xml, Main.view.xml
+│       │   ├── model/                   # formatter.js, models.js
+│       │   └── i18n/                    # i18n.properties
+│       ├── ui5.yaml                     # UI5 tooling config (local dev)
+│       └── package.json
+├── approuter/
+│   ├── xs-app.json                      # Approuter routing + welcome file
+│   └── package.json                     # @sap/approuter dependency
+├── scripts/
+│   └── copy-app.js                      # Copies webapp → gen/srv/app/ at build time
+├── gen/                                 # Build output (auto-generated, NOT in git)
+├── mta.yaml                             # MTA deployment descriptor for BTP CF
+├── xs-security.json                     # XSUAA security + redirect-uris config
+├── package.json                         # Root Node.js dependencies and scripts
+├── .cdsrc.json                          # CDS profiles + build config (no hardcoded profile)
+├── .env.example                         # Template for local environment variables
+├── default-env.json.example             # Template for HANA Cloud credentials (hybrid mode)
 ├── .gitignore
-└── CLAUDE.md                   # This file
+└── CLAUDE.md                            # This file
 ```
 
 ---
@@ -95,30 +119,6 @@ Base URL (local): `http://localhost:4004/invoice`
 | `/invoice/getInvoiceSummary()`                 | GET    | Aggregated totals by status        |
 | `/invoice/recalculateInvoiceTotal`             | POST   | Sync invoice total from items      |
 
-### Example OData Requests
-
-```bash
-# List all invoices
-GET http://localhost:4004/invoice/Invoices
-
-# Get invoice with items expanded
-GET http://localhost:4004/invoice/Invoices(5a1d3e8a-0001-4abc-8001-000000000001)?$expand=items
-
-# Mark as paid
-POST http://localhost:4004/invoice/Invoices(5a1d3e8a-0001-4abc-8001-000000000001)/markAsPaid
-
-# Cancel with reason
-POST http://localhost:4004/invoice/Invoices(5a1d3e8a-0001-4abc-8001-000000000001)/cancelInvoice
-Content-Type: application/json
-{ "reason": "Duplicate invoice" }
-
-# Invoice summary
-GET http://localhost:4004/invoice/getInvoiceSummary()
-
-# Filter open invoices
-GET http://localhost:4004/invoice/Invoices?$filter=status eq 'OPEN'
-```
-
 ---
 
 ## Custom Handler Logic (`srv/invoice-service.js`)
@@ -158,7 +158,6 @@ Seed data from `db/data/*.csv` is loaded automatically.
    cf create-service hana hdi-shared CAPHanaDemoApp-db
    cf create-service-key CAPHanaDemoApp-db CAPHanaDemoApp-db-key
    ```
-   > If `hana` service not found, run `cf marketplace` to find the correct name (may be `hanatrial` on some trial accounts).
 
 3. **Bind the service for local use:**
    ```bash
@@ -177,19 +176,13 @@ Seed data from `db/data/*.csv` is loaded automatically.
    npm run watch:hybrid
    ```
 
-**Alternative — manual `default-env.json`:**
-```bash
-cf service-key CAPHanaDemoApp-db CAPHanaDemoApp-db-key
-# Copy output, paste into default-env.json (see default-env.json.example)
-```
-
 ---
 
 ## BTP Deployment
 
 ### Prerequisites
 - SAP BTP trial account with Cloud Foundry environment enabled
-- SAP HANA Cloud instance provisioned in BTP trial
+- SAP HANA Cloud instance provisioned and **started** in BTP trial
 - Installed tools:
   - `cf` CLI: [docs.cloudfoundry.org](https://docs.cloudfoundry.org/cf-cli/)
   - `mbt` (MTA Build Tool): `npm install -g mbt`
@@ -206,17 +199,20 @@ mbt build
 
 # 3. Deploy to CF
 cf deploy mta_archives/CAPHanaDemoApp_1.0.0.mtar
-
-# Or use the npm script:
-npm run deploy:cf
 ```
 
-### Post-Deployment
-After deploying, check the app URL:
-```bash
-cf app CAPHanaDemoApp-srv
-```
-Access the service at: `https://<app-url>/invoice`
+### Post-Deployment — Assign Role Collection
+The XSUAA service requires users to be granted the `InvoiceAdmin` role collection before they can access data:
+
+1. BTP Cockpit → your subaccount → **Security** → **Users**
+2. Click your user → **Assign Role Collection** → select **InvoiceAdmin** → Save
+
+### Deployed URLs (trial account)
+| Component    | URL                                                                                                  |
+|--------------|------------------------------------------------------------------------------------------------------|
+| Approuter    | `https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com`              |
+| CAP Server   | `https://5b4c46e4trial-dev-caphanademoapp-srv.cfapps.us10-001.hana.ondemand.com`                    |
+| App (direct) | `https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com/com.caphanademo.invoices/index.html` |
 
 ---
 
@@ -229,6 +225,7 @@ Access the service at: `https://<app-url>/invoice`
 | `@cap-js/sqlite`    | SQLite adapter for local development                 |
 | `@sap/xssec`        | JWT token validation for XSUAA (BTP auth)            |
 | `passport`          | HTTP auth middleware used by `@sap/xssec`            |
+| `@sap/approuter`    | Application Router — OAuth2 login + request proxy    |
 | `@sap/cds-dk`       | CAP Developer Kit (cds CLI, codegen) — dev only      |
 
 ---
@@ -241,6 +238,49 @@ Access the service at: `https://<app-url>/invoice`
 | `hybrid`      | HANA Cloud  | xsuaa    | `npm run watch:hybrid`           |
 | `production`  | HANA Cloud  | xsuaa    | BTP deployment                   |
 
+> **Important:** `.cdsrc.json` must NOT contain a top-level `"profiles"` key. The active profile is
+> determined by `NODE_ENV` at runtime (CF buildpack sets `NODE_ENV=production` automatically).
+> Hardcoding `"profiles": ["development"]` would force SQLite + mocked auth even on BTP.
+
+---
+
+## Architecture (BTP)
+
+```
+Browser
+  │
+  ▼
+Approuter (CAPHanaDemoApp-approuter)
+  │  xs-app.json → all traffic proxied to srv-api destination
+  │  XSUAA OAuth2 login/callback handled here
+  │
+  ▼
+CAP Server (CAPHanaDemoApp-srv)
+  │  Serves Fiori Elements UI from app/com.caphanademo.invoices/
+  │  Serves OData V4 at /invoice
+  │  Validates JWT from XSUAA
+  │
+  ▼
+HANA Cloud HDI Container (CAPHanaDemoApp-db)
+  │  Tables: invoice.Invoice, invoice.InvoiceToItem
+  │  Views: InvoiceService.Invoices, InvoiceService.InvoiceItems
+```
+
+---
+
+## XSUAA Configuration Notes (`xs-security.json`)
+
+- `xsappname` in `xs-security.json` is `CAPHanaDemoApp` (base name).
+  The MTA substitutes it to `CAPHanaDemoApp-${org}-${space}` at deploy time.
+- `oauth2-configuration.redirect-uris` must include the Approuter URL pattern.
+  Currently set to `https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com/**`.
+- If the Approuter URL changes (new space/org), update `redirect-uris` and run:
+  ```bash
+  cf update-service CAPHanaDemoApp-auth -c '{"xsappname":"CAPHanaDemoApp-<org>-<space>","oauth2-configuration":{...}}'
+  cf restage CAPHanaDemoApp-approuter
+  cf restage CAPHanaDemoApp-srv
+  ```
+
 ---
 
 ## Conventions
@@ -251,3 +291,4 @@ Access the service at: `https://<app-url>/invoice`
 - **Handler file**: same name as the service CDS file (`invoice-service.js`)
 - **Logging**: use `cds.log('invoice-service')` — never `console.log` in production code
 - **Error codes**: 400 for validation, 404 for not-found
+- **UI static files**: copied to `gen/srv/app/` by `scripts/copy-app.js` at MTA build time

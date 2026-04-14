@@ -1,87 +1,87 @@
-# UI5 Application com.caphanademo.invoices
+# Invoice Management — SAPUI5 Fiori Elements App
 
-Insert the purpose of this project and some interesting info here...
+SAPUI5 Fiori Elements frontend for the CAPHanaDemoApp Invoice Management service.
 
-## Description
+Implements a **List Report + Object Page** pattern using `sap.fe.templates`, connected to the CAP OData V4 `InvoiceService`.
 
-This app demonstrates a setup for developing UI5 applications.
+---
 
-## Requirements
+## Tech Stack
 
-Either [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/) for dependency management.
+- **SAPUI5 1.120.23** (loaded from CDN: `sapui5.hana.ondemand.com`)
+- **sap.fe.templates** — Fiori Elements List Report + Object Page
+- **OData V4** model bound to `/invoice` service
+- **sap_horizon** theme
 
-## Preparation
+---
 
-Use `npm` (or `yarn`) to install the dependencies:
+## Local Development
 
-```sh
-npm install
+Run the CAP server first (from repo root):
+
+```bash
+npm run watch
 ```
 
-(To use yarn, just do `yarn` instead.)
+The Fiori app is then served by the CAP server at:
 
-## Run the App
-
-Execute the following command to run the app locally for development in watch mode (the browser reloads the app automatically when there are changes in the source code):
-
-```sh
-npm start
+```
+http://localhost:4004/com.caphanademo.invoices/index.html
 ```
 
-As shown in the terminal after executing this command, the app is then running on http://localhost:8080/index.html. A browser window with this URL should automatically open.
+No separate UI5 tooling server is needed for development — CAP serves the static files directly.
 
-(When using yarn, do `yarn start` instead.)
+---
 
-## Build the App
+## App Structure
 
-### Unoptimized (but quick)
-
-Execute the following command to build the project and get an app that can be deployed:
-
-```sh
-npm run build
+```
+webapp/
+├── index.html              # SAPUI5 bootstrap (CDN, sap_horizon theme)
+├── manifest.json           # App descriptor — OData model, Fiori Elements routes
+├── Component.js            # UI5 root component
+├── changes/
+│   ├── flexibility-bundle.json   # sap.ui.fl flexibility bundle
+│   └── changes-bundle.json
+├── controller/
+│   ├── BaseController.js
+│   ├── App.controller.js
+│   └── Main.controller.js
+├── view/
+│   ├── App.view.xml
+│   └── Main.view.xml
+├── model/
+│   ├── formatter.js
+│   └── models.js
+└── i18n/
+    └── i18n.properties
 ```
 
-The result is placed into the `dist` folder. To start the generated package, just run
+---
 
-```sh
-npm run start:dist
-```
+## OData Service
 
-Note that `index.html` still loads the UI5 framework from the relative URL `resources/...`, which does not physically exist, but is only provided dynamically by the UI5 tooling. So for an actual deployment you should change this URL to either [the CDN](https://sdk.openui5.org/#/topic/2d3eb2f322ea4a82983c1c62a33ec4ae) or your local deployment of UI5.
+| Entity          | Endpoint                         |
+|-----------------|----------------------------------|
+| Invoices        | `/invoice/Invoices`              |
+| Invoice Items   | `/invoice/InvoiceItems`          |
 
-(When using yarn, do `yarn build` and `yarn start:dist` instead.)
+Bound actions available on Invoices:
+- `markAsPaid` — sets status to PAID
+- `cancelInvoice` — sets status to CANCELLED (requires reason)
 
-### Optimized
+---
 
-For an optimized self-contained build (takes longer because the UI5 resources are built, too), do:
+## BTP Deployment
 
-```sh
-npm run build:opt
-```
+The webapp is **not** deployed as a standalone HTML5 Repository app. Instead, at MTA build time, `scripts/copy-app.js` copies this `webapp/` directory into `gen/srv/app/com.caphanademo.invoices/`, and the CAP server serves it as static files in production.
 
-To start the generated package, again just run:
+The SAP Approuter (`approuter/xs-app.json`) is configured with:
+- `welcomeFile: /com.caphanademo.invoices/index.html`
+- All traffic proxied to the CAP server destination with XSUAA auth
 
-```sh
-npm run start:dist
-```
-
-In this case, all UI5 framework resources are also available within the `dist` folder, so the folder can be deployed as-is to any static web server, without changing the bootstrap URL.
-
-With the self-contained build, the bootstrap URL in `index.html` has already been modified to load the newly created `sap-ui-custom.js` for bootstrapping, which contains all app resources as well as all needed UI5 JavaScript resources. Most UI5 resources inside the `dist` folder are for this reason actually **not** needed to run the app. Only the non-JS-files, like translation texts and CSS files, are used and must also be deployed. (Only when for some reason JS files are missing from the optimized self-contained bundle, they are also loaded separately.)
-
-(When using yarn, do `yarn build:opt` and `yarn start:dist` instead.)
-
-## Check the Code
-
-To lint the code, do:
-
-```sh
-npm run lint
-```
-
-(Again, when using yarn, do `yarn lint` instead.)
+---
 
 ## License
 
-This project is licensed under the Apache Software License, version 2.0 except as noted otherwise in the [LICENSE](LICENSE) file.
+Apache 2.0
