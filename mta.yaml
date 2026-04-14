@@ -107,3 +107,6 @@ resources:
       config:
         xsappname: CAPHanaDemoApp-${org}-${space}
         tenant-mode: dedicated
+        oauth2-configuration:
+          redirect-uris:
+            - "https://${org}-${space}-caphanademoapp-approuter.${default-domain}/**"

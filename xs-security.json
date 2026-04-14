@@ -41,10 +41,6 @@
   ],
   "oauth2-configuration": {
     "token-validity": 43200,
-    "refresh-token-validity": 604800,
-    "redirect-uris": [
-      "https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com/**",
-      "https://*.cfapps.us10-001.hana.ondemand.com/**"
-    ]
+    "refresh-token-validity": 604800
   }
 }
