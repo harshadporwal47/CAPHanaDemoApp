@@ -10,8 +10,8 @@ A **SAP Cloud Application Programming (CAP)** application built with Node.js tha
 - Exposes an OData V4 service (`InvoiceService`) for Invoice management
 - Persists data to **SAP HANA Cloud** (via HDI containers on BTP)
 - Uses **SQLite in-memory** for local development (no HANA required by default)
-- Supports **hybrid mode** — local Node.js server connected to a remote HANA instance
-- Serves a **SAPUI5 Fiori Elements** List Report + Object Page UI
+- Supports **hybrid mode** — local Node.js server + local UI5 app connected to remote HANA Cloud
+- Serves a **SAPUI5 Fiori Elements** List Report + Object Page UI (via `cds-plugin-ui5` in dev)
 - Is deployable to **SAP BTP Cloud Foundry** via MTA
 
 **GitHub:** https://github.com/harshadporwal47/CAPHanaDemoApp
@@ -26,10 +26,10 @@ CAPHanaDemoApp/
 ├── db/
 │   ├── schema.cds                        # CDS data model (Invoice, InvoiceToItem)
 │   └── data/
-│       ├── invoice-Invoice.csv           # Seed data for Invoice
-│       └── invoice-InvoiceToItem.csv     # Seed data for InvoiceToItem
+│       ├── invoice-Invoice.csv           # Seed data for Invoice (5 records)
+│       └── invoice-InvoiceToItem.csv     # Seed data for InvoiceToItem (8 records)
 ├── srv/
-│   ├── invoice-service.cds              # OData service definition + annotations
+│   ├── invoice-service.cds              # OData service definition + UI annotations
 │   └── invoice-service.js               # Custom event handlers (business logic)
 ├── app/
 │   └── com.caphanademo.invoices/
@@ -38,7 +38,7 @@ CAPHanaDemoApp/
 │       │   ├── manifest.json            # App descriptor (Fiori Elements, OData model)
 │       │   ├── Component.js             # UI5 component root
 │       │   ├── changes/
-│       │   │   ├── flexibility-bundle.json   # sap.ui.fl bundle (must be valid JSON array structure)
+│       │   │   ├── flexibility-bundle.json   # sap.ui.fl bundle (must be valid JSON object)
 │       │   │   └── changes-bundle.json
 │       │   ├── controller/              # BaseController, App, Main
 │       │   ├── view/                    # App.view.xml, Main.view.xml
@@ -50,12 +50,13 @@ CAPHanaDemoApp/
 │   ├── xs-app.json                      # Approuter routing + welcome file
 │   └── package.json                     # @sap/approuter dependency
 ├── scripts/
-│   └── copy-app.js                      # Copies webapp → gen/srv/app/ at build time
+│   └── copy-app.js                      # Copies webapp → gen/srv/app/ at MTA build time
 ├── gen/                                 # Build output (auto-generated, NOT in git)
 ├── mta.yaml                             # MTA deployment descriptor for BTP CF
-├── xs-security.json                     # XSUAA security + redirect-uris config
-├── package.json                         # Root Node.js dependencies and scripts
-├── .cdsrc.json                          # CDS profiles + build config (no hardcoded profile)
+├── xs-security.json                     # XSUAA roles and token config (no URLs — dynamic)
+├── package.json                         # Root Node.js dependencies, scripts, dev auth config
+├── .cdsrc.json                          # CDS db + auth profiles; copied to gen/srv at build
+├── .cdsrc-private.json                  # HANA binding credentials — NOT in git (gitignored)
 ├── .env.example                         # Template for local environment variables
 ├── default-env.json.example             # Template for HANA Cloud credentials (hybrid mode)
 ├── .gitignore
@@ -71,26 +72,28 @@ CAPHanaDemoApp/
 |----------------|----------------|----------------------------------------|
 | ID             | UUID (PK)      | Auto-generated via `cuid`              |
 | invoiceNumber  | String(20)     | Auto-generated: `INV-YYYY-NNNN`        |
-| customerName   | String(100)    |                                        |
+| customerName   | String(100)    | `@mandatory`                           |
 | customerEmail  | String(200)    |                                        |
-| invoiceDate    | Date           |                                        |
+| invoiceDate    | Date           | `@mandatory`                           |
 | dueDate        | Date           |                                        |
 | totalAmount    | Decimal(15,2)  | Kept in sync with sum of item amounts  |
 | currency       | String(3)      | Default: USD                           |
-| status         | String(20)     | OPEN / PENDING / PAID / CANCELLED      |
+| status         | InvoiceStatus  | OPEN / PENDING / PAID / CANCELLED; `@assert.range` |
 | notes          | String(500)    |                                        |
 | items          | Composition   | → many InvoiceToItem                   |
+
+Both entities use `cuid` (UUID PK) and `managed` (createdAt, createdBy, modifiedAt, modifiedBy).
 
 ### `invoice.InvoiceToItem` (Line Items)
 | Field       | Type           | Notes                                  |
 |-------------|----------------|----------------------------------------|
 | ID          | UUID (PK)      | Auto-generated via `cuid`              |
-| invoice     | Association    | → Invoice (FK: invoice_ID)             |
-| itemNumber  | Integer        |                                        |
-| description | String(200)    |                                        |
-| quantity    | Decimal(10,2)  |                                        |
+| invoice     | Association    | → Invoice (FK: invoice_ID); `@mandatory` |
+| itemNumber  | Integer        | `@mandatory`                           |
+| description | String(200)    | `@mandatory`                           |
+| quantity    | Decimal(10,2)  | `@mandatory`                           |
 | unit        | String(10)     | Default: EA                            |
-| unitPrice   | Decimal(15,2)  |                                        |
+| unitPrice   | Decimal(15,2)  | `@mandatory`                           |
 | amount      | Decimal(15,2)  | Auto-computed: quantity × unitPrice    |
 | taxRate     | Decimal(5,2)   | Default: 0                             |
 | taxAmount   | Decimal(15,2)  | Auto-computed: amount × taxRate / 100  |
@@ -98,83 +101,144 @@ CAPHanaDemoApp/
 
 ---
 
-## Service API
+## Service Layer (`srv/invoice-service.cds`)
 
-Base URL (local): `http://localhost:4004/invoice`
+Service path: `/invoice` (OData V4). Exposed entities:
 
-### Entities
-| Endpoint                         | Methods                    |
-|----------------------------------|----------------------------|
-| `/invoice/Invoices`              | GET, POST                  |
-| `/invoice/Invoices(ID)`          | GET, PUT, PATCH, DELETE    |
-| `/invoice/Invoices(ID)/items`    | GET (via $expand)          |
-| `/invoice/InvoiceItems`          | GET, POST                  |
-| `/invoice/InvoiceItems(ID)`      | GET, PUT, PATCH, DELETE    |
+| Entity        | Draft enabled | Notes                                      |
+|---------------|---------------|--------------------------------------------|
+| `Invoices`    | ✅ Yes         | Projection on `invoice.Invoice`            |
+| `InvoiceItems`| ❌ No          | Projection on `invoice.InvoiceToItem`      |
 
-### Actions & Functions
-| Endpoint                                       | Method | Description                        |
-|------------------------------------------------|--------|------------------------------------|
-| `/invoice/Invoices(ID)/markAsPaid`             | POST   | Mark invoice as PAID               |
-| `/invoice/Invoices(ID)/cancelInvoice`          | POST   | Cancel invoice (body: `{reason}`)  |
-| `/invoice/getInvoiceSummary()`                 | GET    | Aggregated totals by status        |
-| `/invoice/recalculateInvoiceTotal`             | POST   | Sync invoice total from items      |
+### Bound Actions (on `Invoices`)
+| Action          | Parameters       | Returns              | Business Rule                            |
+|-----------------|------------------|----------------------|------------------------------------------|
+| `markAsPaid`    | —                | `{ message }`        | Validates not already PAID / CANCELLED   |
+| `cancelInvoice` | `reason: String` | `{ message }`        | Validates not already CANCELLED / PAID   |
+
+### Unbound Actions & Functions
+| Name                      | Type     | Returns                              |
+|---------------------------|----------|--------------------------------------|
+| `getInvoiceSummary()`     | Function | Array of `{status, count, totalAmount, currency}` |
+| `recalculateInvoiceTotal` | Action   | `{invoiceID, totalAmount, itemCount}` |
+
+### UI Annotations (in `invoice-service.cds`)
+- `UI.HeaderInfo` — title: invoiceNumber, description: customerName
+- `UI.LineItem` — 7 columns: invoiceNumber, customerName, invoiceDate, dueDate, totalAmount, currency, status
+- `UI.SelectionFields` — filter bar: status, customerName, invoiceDate
+- `UI.Facets` — Object Page: "General Information" (InvoiceDetails + Financial) + "Invoice Items" sub-table
 
 ---
 
 ## Custom Handler Logic (`srv/invoice-service.js`)
 
-| Hook                                     | What it does                                       |
-|------------------------------------------|----------------------------------------------------|
-| `before CREATE Invoices`                 | Auto-generates `invoiceNumber`, sets status=OPEN   |
-| `before CREATE/UPDATE InvoiceItems`      | Computes `amount`, `taxAmount`, `netAmount`        |
-| `after CREATE/UPDATE/DELETE InvoiceItems`| Recalculates parent Invoice `totalAmount`          |
-| `on markAsPaid`                          | Validates + sets status=PAID                       |
-| `on cancelInvoice`                       | Validates + sets status=CANCELLED with notes       |
-| `on getInvoiceSummary`                   | GROUP BY status aggregate query                    |
-| `on recalculateInvoiceTotal`             | Re-sums items and updates Invoice total            |
+| Hook                                     | What it does                                                      |
+|------------------------------------------|-------------------------------------------------------------------|
+| `before CREATE Invoices`                 | Auto-generates `invoiceNumber` (INV-YYYY-NNNN via DB count), sets status=OPEN, totalAmount=0 |
+| `before CREATE/UPDATE InvoiceItems`      | Validates amount = qty × unitPrice (±0.01 tolerance), computes `taxAmount`, `netAmount` |
+| `after CREATE/UPDATE/DELETE InvoiceItems`| Calls `_syncInvoiceTotal()` → sums items, updates Invoice.totalAmount |
+| `on markAsPaid`                          | 404 if not found; 400 if already PAID or CANCELLED; sets status=PAID |
+| `on cancelInvoice`                       | 404 if not found; 400 if already CANCELLED or PAID; sets status=CANCELLED + notes |
+| `on getInvoiceSummary`                   | SELECT status, count(*), sum(totalAmount), currency GROUP BY status, currency |
+| `on recalculateInvoiceTotal`             | 404 if not found; calls `_syncInvoiceTotal()`; returns result     |
+| `_syncInvoiceTotal(invoiceID)` (private) | SELECTs all item.amount, sums them, UPDATEs Invoice.totalAmount   |
+
+Logging: `cds.log('invoice-service')` → `LOG.info / LOG.debug`
+
+---
+
+## Configuration Architecture
+
+### Three config sources (in priority order — highest wins)
+
+```
+.cdsrc-private.json   ← HANA binding credentials (git-ignored, created by cds bind)
+       ↑ overrides
+.cdsrc.json           ← DB + auth per profile; also copied to gen/srv at build time
+       ↑ overrides
+package.json (cds{})  ← Dev auth config (mocked users for development + hybrid)
+```
+
+### `.cdsrc.json` — profiles
+```json
+{
+  "requires": {
+    "db": {
+      "[production]": { "kind": "hana" },
+      "[hybrid]":     { "kind": "hana" },
+      "[development]":{ "kind": "sqlite", "credentials": { "url": ":memory:" } }
+    },
+    "auth": {
+      "[production]": { "kind": "xsuaa" },
+      "[hybrid]":     { "kind": "mocked" }   ← mocked locally even with HANA
+    }
+  }
+}
+```
+
+### `package.json` cds section — dev auth with mocked users
+```json
+{
+  "cds": {
+    "requires": {
+      "auth": {
+        "[production]":  { "kind": "xsuaa" },
+        "[development]": { "kind": "mocked" },
+        "[hybrid]":      { "kind": "mocked" }
+      }
+    }
+  }
+}
+```
+
+> **Critical rule:** `.cdsrc.json` must NOT have `"profiles": ["development"]` at the top level.
+> That hardcoding forces SQLite + mocked auth even on BTP CF where `NODE_ENV=production`.
 
 ---
 
 ## Local Development
 
-### Option 1 — SQLite in-memory (no HANA needed)
+### Option 1 — SQLite in-memory (fastest, no BTP needed)
 
 ```bash
 npm install
-npm run watch        # starts cds watch on http://localhost:4004
+npm run watch
 ```
 
-Seed data from `db/data/*.csv` is loaded automatically.
+- URL: http://localhost:4004
+- UI: http://localhost:4004/com.caphanademo.invoices/index.html
+- Auth: mocked (no login prompt; `*: true` allows all users)
+- DB: SQLite in-memory, seeded from `db/data/*.csv`
+- UI5 served by: `cds-plugin-ui5` (mounts `app/` automatically)
 
-### Option 2 — Hybrid mode (local server + remote HANA Cloud)
+### Option 2 — Hybrid mode (local server + HANA Cloud)
 
-1. **Log in to BTP CF trial:**
-   ```bash
-   cf login -a https://api.cf.us10.hana.ondemand.com
-   ```
+**One-time setup** (only needed if `.cdsrc-private.json` is missing or stale):
+```bash
+cf login -a https://api.cf.us10.hana.ondemand.com
+npx cds bind --to CAPHanaDemoApp-db
+```
+This creates `.cdsrc-private.json` with the HDI container credentials.
 
-2. **Create the HDI container (first time only):**
-   ```bash
-   cf create-service hana hdi-shared CAPHanaDemoApp-db
-   cf create-service-key CAPHanaDemoApp-db CAPHanaDemoApp-db-key
-   ```
+**Start:**
+```bash
+npm run watch:hybrid       # = cds watch --profile hybrid
+```
 
-3. **Bind the service for local use:**
-   ```bash
-   npx cds bind --to CAPHanaDemoApp-db
-   ```
-   This creates `.cdsrc-private.json` with the service binding credentials.
+- URL: http://localhost:4004
+- UI: http://localhost:4004/com.caphanademo.invoices/index.html
+- Auth: mocked (no login prompt)
+- DB: **HANA Cloud** (reads credentials from `.cdsrc-private.json`)
+- UI5: served live by `cds-plugin-ui5` (uses SAPUI5 1.146.x from local tooling)
+- Requires: HANA Cloud instance must be **started** in BTP Cockpit
 
-4. **Deploy DB artefacts to HANA:**
-   ```bash
-   npm run build
-   npx cds deploy --to hana --profile hybrid
-   ```
-
-5. **Start in hybrid mode:**
-   ```bash
-   npm run watch:hybrid
-   ```
+**Startup log confirms correct config:**
+```
+bound db to cf managed service CAPHanaDemoApp-db:CAPHanaDemoApp-db-key
+connect to db > hana { host: '...hanacloud.ondemand.com', ... }
+using auth strategy { kind: 'mocked' }
+server listening on { url: 'http://localhost:4004' }
+```
 
 ---
 
@@ -183,29 +247,28 @@ Seed data from `db/data/*.csv` is loaded automatically.
 ### Prerequisites
 - SAP BTP trial account with Cloud Foundry environment enabled
 - SAP HANA Cloud instance provisioned and **started** in BTP trial
-- Installed tools:
-  - `cf` CLI: [docs.cloudfoundry.org](https://docs.cloudfoundry.org/cf-cli/)
-  - `mbt` (MTA Build Tool): `npm install -g mbt`
-  - `MultiApps CF plugin`: `cf install-plugin multiapps`
+- Tools: `cf` CLI, `mbt` (`npm install -g mbt`), MultiApps CF plugin
 
 ### Deploy Steps
 
 ```bash
-# 1. Log in to CF
+# 1. Log in
 cf login -a https://api.cf.us10.hana.ondemand.com
 
-# 2. Build the MTA archive
+# 2. Build MTA archive (runs npm install + cds build + copy-app.js)
 mbt build
 
-# 3. Deploy to CF
+# 3. Deploy
 cf deploy mta_archives/CAPHanaDemoApp_1.0.0.mtar
 ```
 
-### Post-Deployment — Assign Role Collection
-The XSUAA service requires users to be granted the `InvoiceAdmin` role collection before they can access data:
+The MTA build step runs (via `mta.yaml` before-all):
+1. `npm install --production=false`
+2. `npx cds build --production` → generates `gen/srv/` and `gen/db/`
+3. `node scripts/copy-app.js` → copies `app/...webapp/` into `gen/srv/app/`
 
-1. BTP Cockpit → your subaccount → **Security** → **Users**
-2. Click your user → **Assign Role Collection** → select **InvoiceAdmin** → Save
+### Post-Deployment — Assign Role Collection
+BTP Cockpit → Subaccount → Security → Users → your user → Assign Role Collection → **InvoiceAdmin**
 
 ### Deployed URLs (trial account)
 | Component    | URL                                                                                                  |
@@ -218,29 +281,26 @@ The XSUAA service requires users to be granted the `InvoiceAdmin` role collectio
 
 ## Key Dependencies
 
-| Package             | Purpose                                              |
-|---------------------|------------------------------------------------------|
-| `@sap/cds`          | CAP runtime (OData, CQL, event framework)            |
-| `@cap-js/hana`      | HANA Cloud adapter for CAP                           |
-| `@cap-js/sqlite`    | SQLite adapter for local development                 |
-| `@sap/xssec`        | JWT token validation for XSUAA (BTP auth)            |
-| `passport`          | HTTP auth middleware used by `@sap/xssec`            |
-| `@sap/approuter`    | Application Router — OAuth2 login + request proxy    |
-| `@sap/cds-dk`       | CAP Developer Kit (cds CLI, codegen) — dev only      |
+| Package             | Purpose                                                      |
+|---------------------|--------------------------------------------------------------|
+| `@sap/cds`          | CAP runtime (OData, CQL, event framework)                    |
+| `@cap-js/hana`      | HANA Cloud adapter for CAP                                   |
+| `@cap-js/sqlite`    | SQLite adapter for local development (devDependency)         |
+| `@sap/xssec`        | JWT token validation for XSUAA (BTP auth)                    |
+| `passport`          | HTTP auth middleware used by `@sap/xssec`                    |
+| `@sap/approuter`    | Application Router — OAuth2 login + request proxy (BTP only) |
+| `@sap/cds-dk`       | CAP Developer Kit (cds CLI, codegen) — devDependency         |
+| `cds-plugin-ui5`    | Serves `app/` UI5 apps via CAP dev server — devDependency    |
 
 ---
 
 ## CDS Profiles
 
-| Profile       | DB          | Auth     | When used                        |
-|---------------|-------------|----------|----------------------------------|
-| `development` | SQLite mem  | mocked   | `npm run watch` (default)        |
-| `hybrid`      | HANA Cloud  | xsuaa    | `npm run watch:hybrid`           |
-| `production`  | HANA Cloud  | xsuaa    | BTP deployment                   |
-
-> **Important:** `.cdsrc.json` must NOT contain a top-level `"profiles"` key. The active profile is
-> determined by `NODE_ENV` at runtime (CF buildpack sets `NODE_ENV=production` automatically).
-> Hardcoding `"profiles": ["development"]` would force SQLite + mocked auth even on BTP.
+| Profile       | DB          | Auth     | When used                               |
+|---------------|-------------|----------|-----------------------------------------|
+| `development` | SQLite mem  | mocked   | `npm run watch` (default, NODE_ENV unset) |
+| `hybrid`      | HANA Cloud  | mocked   | `npm run watch:hybrid` (local + HANA)   |
+| `production`  | HANA Cloud  | xsuaa    | BTP CF deployment (NODE_ENV=production) |
 
 ---
 
@@ -253,32 +313,40 @@ Browser
 Approuter (CAPHanaDemoApp-approuter)
   │  xs-app.json → all traffic proxied to srv-api destination
   │  XSUAA OAuth2 login/callback handled here
+  │  redirect-uri built dynamically via MTA: ${org}-${space}-...-approuter.${default-domain}/**
   │
   ▼
 CAP Server (CAPHanaDemoApp-srv)
-  │  Serves Fiori Elements UI from app/com.caphanademo.invoices/
+  │  Serves Fiori Elements UI from gen/srv/app/com.caphanademo.invoices/
   │  Serves OData V4 at /invoice
   │  Validates JWT from XSUAA
   │
   ▼
 HANA Cloud HDI Container (CAPHanaDemoApp-db)
   │  Tables: invoice.Invoice, invoice.InvoiceToItem
-  │  Views: InvoiceService.Invoices, InvoiceService.InvoiceItems
+  │  Views:  InvoiceService.Invoices, InvoiceService.InvoiceItems
 ```
 
 ---
 
-## XSUAA Configuration Notes (`xs-security.json`)
+## XSUAA Configuration (`xs-security.json` + `mta.yaml`)
 
-- `xsappname` in `xs-security.json` is `CAPHanaDemoApp` (base name).
-  The MTA substitutes it to `CAPHanaDemoApp-${org}-${space}` at deploy time.
-- `oauth2-configuration.redirect-uris` must include the Approuter URL pattern.
-  Currently set to `https://5b4c46e4trial-dev-caphanademoapp-approuter.cfapps.us10-001.hana.ondemand.com/**`.
-- If the Approuter URL changes (new space/org), update `redirect-uris` and run:
+- `xsappname` in `xs-security.json` is the base name `CAPHanaDemoApp`.
+  MTA substitutes it to `CAPHanaDemoApp-${org}-${space}` at deploy time via the `config:` block.
+- `redirect-uris` are **not** in `xs-security.json` (it is environment-agnostic).
+  They are set dynamically in `mta.yaml`:
+  ```yaml
+  config:
+    xsappname: CAPHanaDemoApp-${org}-${space}
+    oauth2-configuration:
+      redirect-uris:
+        - "https://${org}-${space}-caphanademoapp-approuter.${default-domain}/**"
+  ```
+- If the Approuter URL changes (new space/org), **no file edits needed** — MTA variables handle it.
+- To update a running service manually:
   ```bash
-  cf update-service CAPHanaDemoApp-auth -c '{"xsappname":"CAPHanaDemoApp-<org>-<space>","oauth2-configuration":{...}}'
-  cf restage CAPHanaDemoApp-approuter
-  cf restage CAPHanaDemoApp-srv
+  cf update-service CAPHanaDemoApp-auth -c '{"xsappname":"CAPHanaDemoApp-<org>-<space>","oauth2-configuration":{"redirect-uris":["https://.../**"]}}'
+  cf restage CAPHanaDemoApp-approuter CAPHanaDemoApp-srv
   ```
 
 ---
@@ -289,6 +357,7 @@ HANA Cloud HDI Container (CAPHanaDemoApp-db)
 - **CSV seed files**: named `<namespace>-<EntityName>.csv` in `db/data/`
 - **Service path**: `/invoice` (OData V4)
 - **Handler file**: same name as the service CDS file (`invoice-service.js`)
-- **Logging**: use `cds.log('invoice-service')` — never `console.log` in production code
-- **Error codes**: 400 for validation, 404 for not-found
-- **UI static files**: copied to `gen/srv/app/` by `scripts/copy-app.js` at MTA build time
+- **Logging**: `cds.log('invoice-service')` — use `LOG.info/debug/warn/error`; never `console.log` in production
+- **Error codes**: 400 for validation failures, 404 for not-found
+- **UI static files**: in local dev served live from `app/` by `cds-plugin-ui5`; in BTP copied to `gen/srv/app/` by `scripts/copy-app.js`
+- **Draft**: enabled on `Invoices` (`@odata.draft.enabled`); NOT on `InvoiceItems`

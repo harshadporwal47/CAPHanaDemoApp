@@ -19,7 +19,7 @@
         "kind": "xsuaa"
       },
       "[hybrid]": {
-        "kind": "xsuaa"
+        "kind": "mocked"
       }
     }
   },
