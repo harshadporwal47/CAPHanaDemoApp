@@ -2,8 +2,8 @@
   "name": "cap-hana-demo-app",
   "version": "1.0.0",
   "description": "CAP Application connected to SAP HANA Cloud - Invoice Management Demo",
-  "repository": "<add-your-repo-url>",
-  "license": "UNLICENSED",
+  "repository": "https://github.com/harshadporwal47/CAPHanaDemoApp",
+  "license": "Harshad Porwal",
   "private": true,
   "engines": {
     "node": ">=18"
