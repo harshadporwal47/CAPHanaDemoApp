@@ -1,4 +1,9 @@
 using invoice as inv from '../db/schema';
+using {
+  invoice.CustomerInvoiceSummary,
+  invoice.OverdueInvoiceView,
+  invoice.InvoiceItemDetailView
+} from '../db/views';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Invoice OData Service
@@ -8,7 +13,11 @@ service InvoiceService @(path: '/invoice') {
 
   // ── Entities ────────────────────────────────────────────────────────────────
 
+  // @cds.redirection.target: true  — tells CDS that when multiple entities in
+  // this service project onto invoice.Invoice, THIS is the canonical one that
+  // associations (e.g. InvoiceItems:invoice) should resolve/navigate to.
   @odata.draft.enabled
+  @cds.redirection.target: true
   entity Invoices as projection on inv.Invoice
     actions {
       // Bound action: mark a single invoice as paid
@@ -19,6 +28,23 @@ service InvoiceService @(path: '/invoice') {
     };
 
   entity InvoiceItems as projection on inv.InvoiceToItem;
+
+  // ── CDS View Entities (read-only) ───────────────────────────────────────────
+
+  // VIEW 3 — Aggregation: one row per customer+currency with invoice totals
+  // OData: GET /invoice/CustomerSummary
+  //        GET /invoice/CustomerSummary(customerName='Acme Corp',currency='USD')
+  @readonly entity CustomerSummary  as projection on CustomerInvoiceSummary;
+
+  // VIEW 2 — Filter + Computed column: only OPEN/PENDING + daysOverdue field
+  // OData: GET /invoice/OverdueInvoices
+  //        GET /invoice/OverdueInvoices?$orderby=daysOverdue desc
+  @readonly entity OverdueInvoices  as projection on OverdueInvoiceView;
+
+  // VIEW 4 — JOIN: flat view of line items enriched with parent invoice fields
+  // OData: GET /invoice/ItemDetails
+  //        GET /invoice/ItemDetails?$filter=invoiceStatus eq 'OPEN'
+  @readonly entity ItemDetails      as projection on InvoiceItemDetailView;
 
   // ── Unbound Actions & Functions ─────────────────────────────────────────────
 
