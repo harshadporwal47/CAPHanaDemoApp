@@ -5,7 +5,7 @@ sap.ui.define([
 
     // ─── Stable Fiori Elements IDs ──────────────────────────────────────────────
     const TABLE_ID      = "fe::table::Invoices::LineItem";
-    const DELETE_BTN_ID = "com.caphanademo.invoices::InvoicesList--fe::table::Invoices::LineItem::StandardAction::Delete";
+    const DELETE_BTN_ID = "fe::table::Invoices::LineItem::StandardAction::Delete";
 
     return ControllerExtension.extend(
         "com.caphanademo.invoices.controller.ListReportExtension", {

@@ -92,6 +92,13 @@
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.SelectionFields": {
                   "showClearButton": true
+                },
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "creationMode": {
+                      "name": "NewPage"
+                    }
+                  }
                 }
               },
               "navigation": {
@@ -122,6 +129,9 @@
         "sap.ui.controllerExtensions": {
           "sap.fe.templates.ListReport.ListReportController": {
             "controllerName": "com.caphanademo.invoices.controller.ListReportExtension"
+          },
+          "sap.fe.templates.ObjectPage.ObjectPageController#com.caphanademo.invoices::InvoicesObjectPage": {
+            "controllerName": "com.caphanademo.invoices.controller.ObjectPageExtension"
           }
         }
       }

@@ -297,3 +297,10 @@ annotate InvoiceService.Invoices with @(Capabilities.FilterRestrictions: {Filter
 annotate InvoiceService.Invoices with {
   invoiceDate @title: 'Invoice Date';
 }
+
+annotate InvoiceService.Invoices with {
+  invoiceNumber  @readonly  @UI.CreateHidden: true;
+  customerName   @Core.Immutable: true;
+  customerEmail  @Core.Immutable: true;
+  invoiceDate    @Core.Immutable: true;
+}
